@@ -1,0 +1,162 @@
+import React, { useState } from "react";
+import { Route } from "react-router";
+import { ThemeProvider } from "styled-components";
+import small from "carbon-react/lib/style/themes/small";
+import "carbon-react/lib/utils/css";
+import { startRouter } from "carbon-react/lib/utils/router";
+import Textbox from "carbon-react/lib/__experimental__/components/textbox";
+import GroupedCharacter from "carbon-react/lib/__experimental__/components/grouped-character";
+import Decimal from "carbon-react/lib/__experimental__/components/decimal";
+import { Checkbox } from "carbon-react/lib/__experimental__/components/checkbox";
+import { Formik, Form, Field } from "formik";
+import * as yup from "yup";
+import useFieldValidation from "./useFieldValidation";
+
+const formikAdapterHOC = Component => ({ field, form, ...rest }) => {
+  const onChange = e => {
+    const rawValue =
+      e.target.value.rawValue !== undefined
+        ? e.target.value.rawValue
+        : e.target.value;
+    const value =
+      e.target.getAttribute && e.target.getAttribute("role") === "checkbox"
+        ? e.target.checked
+        : rawValue;
+    form.setFieldValue(field.name, value);
+  };
+
+  const onBlur = e => {
+    form.setFieldValue(
+      field.name,
+      e.target.value.rawValue !== undefined
+        ? e.target.value.rawValue
+        : e.target.value,
+      true /* force validation */
+    );
+    form.setFieldTouched(field.name, true, false /* force abort validation */);
+  };
+  return <Component {...field} {...rest} onChange={onChange} onBlur={onBlur} />;
+};
+const FormikTextBox = formikAdapterHOC(Textbox);
+const FormikGroupedCharacter = formikAdapterHOC(GroupedCharacter);
+const FormikDecimal = formikAdapterHOC(Decimal);
+const FormikCheckbox = formikAdapterHOC(Checkbox);
+
+const App = props => {
+  const [clearFormOnSubmit, setClearFormOnSubmit] = useState(false);
+  const [validateEmail, emailProps] = useFieldValidation(
+    yup.string().email("You need to provide an email address."),
+    yup
+      .string()
+      .matches(
+        /^((?!(hotmail|aol)).)*$/,
+        "This provider doesn't support all functionality. You can continue but you will have limited features."
+      ),
+    yup.string().matches(/^((?!(gnail)).)*$/, "Did you mean @gmail.com")
+  );
+
+  const [validateSortCode, sortCodeProps] = useFieldValidation(
+    yup.string().required("You need to provide a Sort Code"),
+    yup
+      .string()
+      .matches(
+        /^((?!(00)).)/,
+        "This bank isn't supported yet, but you can still recieve payments."
+      )
+  );
+
+  const [validateAmount, amountProps] = useFieldValidation(
+    yup.number().moreThan(1, "The minimum payment is £1.00")
+  );
+
+  const [validateTerms, termsProps] = useFieldValidation(
+    yup.boolean().oneOf([true], "Must Accept Terms and Conditions")
+  );
+
+  return (
+    <ThemeProvider theme={small}>
+      <h1>Example using Formik</h1>
+      <p>
+        Number of Warnings{" "}
+        {[emailProps, sortCodeProps].reduce((total, { hasWarning }) => {
+          return total + (hasWarning ? 1 : 0);
+        }, 0)}
+      </p>
+      <Formik
+        initialValues={{
+          email: "",
+          sortcode: "",
+          amount: "0.00",
+          terms: false
+        }}
+        onSubmit={async (values, { resetForm }) => {
+          // await onSubmit(values)
+          console.log("submit", values);
+          if (clearFormOnSubmit) {
+            resetForm();
+          }
+        }}
+        validateOnBlur
+        validateOnChange={false}
+      >
+        {({ errors, touched, values }) => (
+          <Form>
+            <p>Enter an invalid email address for an error</p>
+            <p>Enter "gnail" for a info</p>
+            <p>Enter "hotmail or aol" for a warning</p>
+            <p>This field always displays an info, but the info can change</p>
+            <Field
+              name="email"
+              label="Email Address"
+              validate={validateEmail}
+              component={FormikTextBox}
+              hasInfo="true"
+              inputIcon="info"
+              tooltipMessage="We'll include this on your invoice header"
+              {...emailProps}
+            />
+            <p>Sort codes starting with 00 are not supported</p>
+            <Field
+              name="sortcode"
+              label="Sort Code"
+              validate={validateSortCode}
+              component={FormikGroupedCharacter}
+              separator="-"
+              groups={[2, 2, 2]}
+              {...touched.sortcode && sortCodeProps}
+            />
+
+            <p>Amount must be greater than £1.00</p>
+            <Field
+              name="amount"
+              label="Amount"
+              validate={validateAmount}
+              component={FormikDecimal}
+              {...touched.amount && amountProps}
+            />
+
+            <p>Singular Checkbox</p>
+            <Field
+              name="terms"
+              label="Do you accept the terms and conditions?"
+              component={FormikCheckbox}
+              validate={validateTerms}
+              checked={values.terms}
+              {...touched.terms && termsProps}
+            />
+
+            <input type="submit" />
+          </Form>
+        )}
+      </Formik>
+
+      <Checkbox
+        checked={clearFormOnSubmit}
+        onChange={e => setClearFormOnSubmit(e.target.checked)}
+        label="Clear form on Submit?"
+      />
+    </ThemeProvider>
+  );
+};
+
+startRouter(<Route path="/" component={App} />);
